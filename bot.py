@@ -1,5 +1,8 @@
 import logging
 import random
+import os
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ConversationHandler, ContextTypes
 
@@ -18,6 +21,19 @@ def get_main_keyboard():
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
+# —————————————————— ВЕБ-СЕРВЕР ДЛЯ RENDER ——————————————————
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"OK")
+
+def run_web_server():
+    port = int(os.environ.get("PORT", 10000))
+    server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
+    server.serve_forever()
+
+# —————————————————— ОСНОВНОЙ БОТ ——————————————————
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if user_id not in user_data:
@@ -81,7 +97,7 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=ReplyKeyboardMarkup([["✅ Готово"], ["🔙 Назад в меню"]], resize_keyboard=True)
         )
 
-    elif text == "📊 Статистика":
+    elif text =="📊 Статистика":
         stats = (
             f"📊 Твоя статистика:\n"
             f"👤 Имя: {user.get('name', 'Не указано')}\n"
@@ -145,6 +161,10 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 def main():
+    # Запускаем веб-сервер в отдельном потоке
+    web_thread = threading.Thread(target=run_web_server, daemon=True)
+    web_thread.start()
+
     application = Application.builder().token(TOKEN).build()
 
     conv_handler = ConversationHandler(
